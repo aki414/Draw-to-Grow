@@ -4030,8 +4030,8 @@ MonoBehaviour:
   - brushGrabbable: {fileID: 1615565817}
     brushTransform: {fileID: 1202676986}
     color: {r: 1, g: 0, b: 0, a: 0}
-    sizeY: 3
-    sizeX: 5
+    sizeY: 30
+    sizeX: 50
     isEraser: 0
     lastPosition: {x: 0, y: 0}
     isFirstDraw: 0
