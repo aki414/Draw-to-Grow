@@ -26,6 +26,9 @@ public class LetterTracingWhiteboard : MonoBehaviour
     public float markerAlpha = 0.7f;
     public bool useBoxCollider = true;
 
+    [Header("Letter Guide Display")]
+    public SpriteRenderer letterGuideRenderer;
+
     [System.Serializable]
     public class BrushSettings
     {
@@ -54,7 +57,6 @@ public class LetterTracingWhiteboard : MonoBehaviour
         SetupRenderTexture();
         InitializeBrushes();
         UpdateCurrentLetterSprite();
-        DrawLetterGuide();
     }
 
     private void OnValidate()
@@ -319,7 +321,8 @@ public class LetterTracingWhiteboard : MonoBehaviour
 
     public void ClearBoard()
     {
-        DrawLetterGuide();
+        if (letterGuideRenderer != null)
+            letterGuideRenderer.sprite = null;
     }
 
     public void SetBackgroundColor(Color newColor)
@@ -333,7 +336,8 @@ public class LetterTracingWhiteboard : MonoBehaviour
                 brush.color.a = 1f;
             }
         }
-        DrawLetterGuide();
+        if (letterGuideRenderer != null)
+            letterGuideRenderer.sprite = null;
     }
 
     public void AddBrush(BrushSettings newBrush)
@@ -369,10 +373,14 @@ public class LetterTracingWhiteboard : MonoBehaviour
         {
             currentLetterSprite = null;
             currentLetterTexture = null;
+            if (letterGuideRenderer != null)
+                letterGuideRenderer.sprite = null;
             return;
         }
         currentLetterSprite = letterSprites[selectedLetterIndex];
         currentLetterTexture = currentLetterSprite.texture;
+        if (letterGuideRenderer != null)
+            letterGuideRenderer.sprite = currentLetterSprite;
     }
 
     // Call this to change the letter at runtime
@@ -380,6 +388,7 @@ public class LetterTracingWhiteboard : MonoBehaviour
     {
         selectedLetterIndex = index;
         UpdateCurrentLetterSprite();
-        DrawLetterGuide();
+        if (letterGuideRenderer != null)
+            letterGuideRenderer.sprite = currentLetterSprite;
     }
 }
