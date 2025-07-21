@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.XR.Interaction.Toolkit;
 using UnityEngine.XR.Interaction.Toolkit.Interactables;
+using TMPro;
 
 public class LetterTracingWhiteboard : MonoBehaviour
 {
@@ -29,6 +30,8 @@ public class LetterTracingWhiteboard : MonoBehaviour
     [Header("Letter Guide Display")]
     public SpriteRenderer letterGuideRenderer;
 
+    public TextMeshProUGUI accuracyText;
+
     [System.Serializable]
     public class BrushSettings
     {
@@ -50,6 +53,9 @@ public class LetterTracingWhiteboard : MonoBehaviour
     private Material brushMaterial;
     private Sprite currentLetterSprite;
     private Texture2D currentLetterTexture;
+    private bool[,] coloredMask; // Mask for colored pixels in the letter area
+    private int totalLetterPixels = 0; // Total pixels in the letter area (alpha > threshold)
+    private int coloredLetterPixels = 0; // Number of colored pixels
 
     private void Start()
     {
@@ -146,6 +152,11 @@ public class LetterTracingWhiteboard : MonoBehaviour
             }
         }
         RenderTexture.active = null;
+        // Update accuracy text
+        if (accuracyText != null)
+        {
+            accuracyText.text = $"Accuracy: {GetAccuracy():F1}%";
+        }
     }
 
     private void DrawBrushOnTexture(BrushSettings brush)
@@ -240,7 +251,56 @@ public class LetterTracingWhiteboard : MonoBehaviour
         if (IsWithinLetterGuide(position) || brush.isEraser)
         {
             DrawAtPosition(position, brush.color, brush.sizeX, brush.sizeY, brush.brushTransform != null ? brush.brushTransform.rotation.eulerAngles.z : 0f);
+            if (!brush.isEraser)
+            {
+                MarkColored(position, brush.sizeX, brush.sizeY, brush.brushTransform != null ? brush.brushTransform.rotation.eulerAngles.z : 0f);
+            }
         }
+    }
+
+    // Mark the pixels as colored in the mask if within the letter area and brush area
+    private void MarkColored(Vector2 position, float sizeX = 20, float sizeY = 20, float rotationAngle = 0f)
+    {
+        if (coloredMask == null) return;
+        int width = coloredMask.GetLength(0);
+        int height = coloredMask.GetLength(1);
+        float radians = rotationAngle * Mathf.Deg2Rad;
+        float cos = Mathf.Cos(radians);
+        float sin = Mathf.Sin(radians);
+        // Iterate over a rectangle centered at position
+        for (int dx = -(int)sizeX; dx <= (int)sizeX; dx++)
+        {
+            for (int dy = -(int)sizeY; dy <= (int)sizeY; dy++)
+            {
+                // Apply rotation
+                float rotatedX = dx * cos + dy * sin;
+                float rotatedY = -dx * sin + dy * cos;
+                int px = Mathf.RoundToInt(position.x + rotatedX);
+                int py = Mathf.RoundToInt(position.y + rotatedY);
+                if (px >= 0 && px < width && py >= 0 && py < height)
+                {
+                    Vector2 checkPos = new Vector2(px, py);
+                    if (!coloredMask[px, py] && IsWithinLetterGuide(checkPos))
+                    {
+                        coloredMask[px, py] = true;
+                        coloredLetterPixels++;
+                    }
+                }
+            }
+        }
+    }
+
+    // Get the current accuracy as a percentage (0-100)
+    public float GetAccuracy()
+    {
+        if (totalLetterPixels == 0) return 0f;
+        return (coloredLetterPixels / (float)totalLetterPixels) * 100f;
+    }
+
+    // Check if the letter is fully colored
+    public bool IsLetterFullyColored(float thresholdPercent = 99f)
+    {
+        return GetAccuracy() >= thresholdPercent;
     }
 
     // Check if the position is within the letter guide (alpha above threshold)
@@ -373,6 +433,9 @@ public class LetterTracingWhiteboard : MonoBehaviour
         {
             currentLetterSprite = null;
             currentLetterTexture = null;
+            coloredMask = null;
+            totalLetterPixels = 0;
+            coloredLetterPixels = 0;
             if (letterGuideRenderer != null)
                 letterGuideRenderer.sprite = null;
             return;
@@ -381,6 +444,41 @@ public class LetterTracingWhiteboard : MonoBehaviour
         currentLetterTexture = currentLetterSprite.texture;
         if (letterGuideRenderer != null)
             letterGuideRenderer.sprite = currentLetterSprite;
+        InitializeColoredMask();
+    }
+
+    // Initialize the colored mask for the current letter
+    private void InitializeColoredMask()
+    {
+        int width = renderTexture.width;
+        int height = renderTexture.height;
+        coloredMask = new bool[width, height];
+        totalLetterPixels = 0;
+        coloredLetterPixels = 0;
+        if (currentLetterTexture == null || currentLetterSprite == null) return;
+
+        float targetWidth = width * 0.5f;
+        float targetHeight = height * 0.5f;
+        float xOffset = (width - targetWidth) * 0.5f;
+        float yOffset = (height - targetHeight) * 0.5f;
+        Rect spriteRect = currentLetterSprite.rect;
+        for (int x = (int)xOffset; x < (int)(xOffset + targetWidth); x++)
+        {
+            for (int y = (int)yOffset; y < (int)(yOffset + targetHeight); y++)
+            {
+                float normX = (x - xOffset) / targetWidth;
+                float normY = (y - yOffset) / targetHeight;
+                int spriteX = Mathf.Clamp((int)(normX * spriteRect.width), 0, (int)spriteRect.width - 1);
+                int spriteY = Mathf.Clamp((int)(normY * spriteRect.height), 0, (int)spriteRect.height - 1);
+                int texX = (int)spriteRect.x + spriteX;
+                int texY = (int)spriteRect.y + spriteY;
+                Color pixel = currentLetterTexture.GetPixel(texX, texY);
+                if (pixel.a > guideAlphaThreshold)
+                {
+                    totalLetterPixels++;
+                }
+            }
+        }
     }
 
     // Call this to change the letter at runtime
